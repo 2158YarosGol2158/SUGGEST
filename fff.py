@@ -324,7 +324,7 @@ async def keep_alive():
         logging.info(f"Keep-alive ping: {time.strftime('%H:%M:%S')}")
         # Здесь можно добавить любую полезную периодическую задачу
         # Например, очистку старых данных, проверку статуса и т.д.
-        await asyncio.sleep(60)  # Выполняем каждую минуту
+        await asyncio.sleep(58)  # Выполняем каждую минуту
 
 # Функция запуска бота
 async def main():
