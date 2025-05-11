@@ -326,23 +326,35 @@ async def keep_alive():
         # Например, очистку старых данных, проверку статуса и т.д.
         await asyncio.sleep(58)  # Выполняем каждую минуту
 
+app = FastAPI()
+
+@app.get("/")
+async def root():
+    return {"status": "alive"}
+
+async def run_http_server():
+    config = uvicorn.Config(app, host="0.0.0.0", port=8080, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
+
+
 # Функция запуска бота
 async def main():
-    # Запускаем задачу поддержания активности
     keep_alive_task = asyncio.create_task(keep_alive())
-    
+    http_server_task = asyncio.create_task(run_http_server())
+
     try:
-        # Запускаем бота
         await dp.start_polling(bot)
     finally:
-        # При завершении бота, отменяем фоновую задачу
         keep_alive_task.cancel()
-        
-        # Ждем завершения задачи
+        http_server_task.cancel()
+
         try:
             await keep_alive_task
+            await http_server_task
         except asyncio.CancelledError:
-            logging.info("Keep-alive task has been cancelled")
+            logging.info("Background tasks cancelled.")
+
 
 if __name__ == '__main__':
     asyncio.run(main())
