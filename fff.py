@@ -1,4 +1,6 @@
-import logging
+from aiogram.filters import or_f
+from aiogram.filters import Command
+from aiogram import Fimport logging
 import asyncio
 import time
 from aiogram import Bot, Dispatcher, types, F
@@ -214,9 +216,16 @@ async def collect_animation(message: types.Message, state: FSMContext):
         await save_content_item(message, state, 'animation', file_id=animation_id, caption=caption)
 
 # Обработчик команды /confirm или кнопки подтверждения
-@dp.message(Command("confirm") | F.text == "✅ Подтвердить отправку", SuggestionStates.waiting_for_confirmation)
+@dp.message(
+    or_f(
+        Command("confirm"),
+        F.text == "✅ Подтвердить отправку"
+    ),
+    SuggestionStates.waiting_for_confirmation
+)
 async def confirm_submission(message: types.Message, state: FSMContext):
     user_data = await state.get_data()
+    # ... остальной код
     category_name = user_data['category_name']
     content_items = user_data.get('content_items', [])
     
