@@ -1,6 +1,7 @@
 from aiogram.filters import or_f
 from aiogram.filters import Command
-from aiogram import Fimport logging
+from aiogram import F
+import logging
 import asyncio
 import time
 from aiogram import Bot, Dispatcher, types, F
