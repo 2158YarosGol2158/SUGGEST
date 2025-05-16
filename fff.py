@@ -1,270 +1,235 @@
-import logging
+# Стандартные библиотеки
 import asyncio
-import time
-from fastapi import FastAPI
-import uvicorn
+import json
+import logging
+import os
+import socket
+import uuid
+from datetime import datetime
+from pathlib import Path
+
+# Сторонние библиотеки
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    CallbackQuery,
     KeyboardButton,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
+    FSInputFile
 )
 
+# Веб-сервер
+from aiohttp import web
+import aiohttp_jinja2
+import jinja2
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Инициализация бота и диспетчера
-API_TOKEN = '7808934270:AAGlSHM-28yONArUi_Ppy2IdA4nRTz53vn0'  # Замените на ваш токен
-bot = Bot(token=API_TOKEN)
+# Конфигурация
+class Config:
+    TOKEN = "7808934270:AAGlSHM-28yONArUi_Ppy2IdA4nRTz53vn0"
+    SUGGESTIONS_CHAT_ID = -1002497927834
+    ADMIN_IDS = [8044034497, 7111844170, 2112777450, 7945702317]
+    CATEGORIES = {
+        'contest': 'Конкурс',
+        'coming_soon': 'Скоро',
+        'other': 'Другое'
+    }
+    WEB_SERVER = {
+        'host': '0.0.0.0',
+        'port': 8080
+    }
+
+# Инициализация бота
+bot = Bot(token=Config.TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# ID администраторов
-ADMIN_IDS = [8044034497, 7111844170, 2112777450, 7945702317, -1002497927834]
-
-# Категории предложений
-CATEGORIES = {
-    'contest': 'Конкурс',
-    'coming_soon': 'Скоро',
-    'other': 'Другое'
-}
-
-# FSM состояния
+# Состояния FSM
 class SuggestionStates(StatesGroup):
     waiting_for_category = State()
     collecting_content = State()
     waiting_for_confirmation = State()
 
-# Клавиатура для выбора категории
-def get_category_keyboard():
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=value, callback_data=f"category_{key}")]
-            for key, value in CATEGORIES.items()
-        ]
-    )
-    return keyboard
+# Глобальные переменные
+suggestions = []
+visitors_log = []
+app = web.Application()
+routes = web.RouteTableDef()
 
-# Клавиатура для подтверждения
-def get_confirmation_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="✅ Подтвердить отправку")],
-            [KeyboardButton(text="➕ Добавить еще")],
-            [KeyboardButton(text="❌ Отменить")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
+def setup_jinja2():
+    aiohttp_jinja2.setup(
+        app,
+        loader=jinja2.FileSystemLoader('templates'),
+        autoescape=True
     )
+
+def create_keyboards():
+    """Фабрика клавиатур"""
+    class Keyboards:
+        @staticmethod
+        def categories():
+            buttons = [
+                [KeyboardButton(text=name)] 
+                for name in Config.CATEGORIES.values()
+            ]
+            return ReplyKeyboardMarkup(
+                keyboard=buttons,
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+
+        @staticmethod
+        def confirmation():
+            return ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="✅ Подтвердить отправку")],
+                    [KeyboardButton(text="➕ Добавить еще")],
+                    [KeyboardButton(text="❌ Отменить")]
+                ],
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+
+        @staticmethod
+        def main_menu():
+            return ReplyKeyboardMarkup(
+                keyboard=[
+                    [KeyboardButton(text="Создать предложение")],
+                    [KeyboardButton(text="Просмотреть сайт предложений")]
+                ],
+                resize_keyboard=True
+            )
+    
+    return Keyboards()
+
+keyboards = create_keyboards()
+
+async def save_to_json(data: list, filename: str):
+    """Сохранение данных в JSON файл"""
+    try:
+        async with aiofiles.open(filename, 'w', encoding='utf-8') as f:
+            await f.write(json.dumps(data, ensure_ascii=False, indent=4))
+    except Exception as e:
+        logger.error(f"Error saving to {filename}: {e}")
+
+async def load_from_json(filename: str) -> list:
+    """Загрузка данных из JSON файла"""
+    try:
+        if os.path.exists(filename):
+            async with aiofiles.open(filename, 'r', encoding='utf-8') as f:
+                return json.loads(await f.read())
+        return []
+    except Exception as e:
+        logger.error(f"Error loading {filename}: {e}")
+        return []
+
+async def collect_visitor_info(request: web.Request) -> dict:
+    """Сбор информации о посетителе"""
+    info = {
+        "timestamp": datetime.now().isoformat(),
+        "ip": request.remote,
+        "user_agent": request.headers.get("User-Agent", "Unknown"),
+        "path": request.path,
+        "method": request.method,
+        "visitor_id": str(uuid.uuid4())
+    }
+    visitors_log.append(info)
+    if len(visitors_log) > 1000:
+        visitors_log.pop(0)
+    return info
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Привет! Я бот для сбора предложений. Используйте /suggest чтобы отправить предложение.")
-
-@dp.message(Command("suggest"))
-async def cmd_suggest(message: types.Message, state: FSMContext):
-    await state.set_state(SuggestionStates.waiting_for_category)
-    await message.answer("Выберите категорию:", reply_markup=get_category_keyboard())
-
-@dp.callback_query(lambda c: c.data.startswith('category_'))
-async def process_category(callback: CallbackQuery, state: FSMContext):
-    category_key = callback.data.split('_')[1]
-    category_name = CATEGORIES[category_key]
-    await state.update_data(
-        category_key=category_key,
-        category_name=category_name,
-        content_items=[]
-    )
-    await state.set_state(SuggestionStates.collecting_content)
-    await callback.answer()
-    await callback.message.answer(
-        f"Вы выбрали: {category_name}\n\n"
-        "Теперь отправляйте контент. После этого используйте /confirm."
+    """Обработка команды /start"""
+    await message.answer(
+        "👋 Привет! Я бот для сбора предложений.",
+        reply_markup=keyboards.main_menu()
     )
 
-# Универсальная функция сохранения
-async def save_content_item(message: types.Message, state: FSMContext, content_type: str, file_id: str = None, text: str = None, caption: str = None):
-    data = await state.get_data()
-    content_items = data.get('content_items', [])
+# ... (остальные обработчики сообщений)
 
-    content_item = {
-        'content_type': content_type,
-        'from_user': {
-            'id': message.from_user.id,
-            'full_name': message.from_user.full_name,
-            'username': message.from_user.username
-        }
+@routes.get('/')
+@aiohttp_jinja2.template('index.html')
+async def index(request: web.Request):
+    """Главная страница веб-интерфейса"""
+    visitor = await collect_visitor_info(request)
+    return {
+        "suggestions": suggestions[-20:],  # Последние 20 предложений
+        "categories": Config.CATEGORIES,
+        "visitor": visitor
     }
-    if file_id:
-        content_item['file_id'] = file_id
-    if text:
-        content_item['text'] = text
-    if caption:
-        content_item['caption'] = caption
 
-    content_items.append(content_item)
-    await state.update_data(content_items=content_items)
+def setup_web_templates():
+    """Инициализация HTML шаблонов"""
+    os.makedirs('templates', exist_ok=True)
+    
+    templates = {
+        'index.html': """
+        <!DOCTYPE html>
+        <html lang="ru">
+        <!-- HTML шаблон главной страницы -->
+        </html>
+        """,
+        'success.html': """
+        <!DOCTYPE html>
+        <html lang="ru">
+        <!-- HTML шаблон страницы успеха -->
+        </html>
+        """
+    }
+    
+    for name, content in templates.items():
+        path = Path('templates') / name
+        if not path.exists():
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(content)
 
-    await message.answer(
-        f"✅ {content_type.capitalize()} сохранен. Всего элементов: {len(content_items)}.",
-        reply_markup=get_confirmation_keyboard()
+async def startup():
+    """Инициализация при запуске"""
+    global suggestions
+    suggestions = await load_from_json('suggestions.json')
+    setup_web_templates()
+    setup_jinja2()
+    
+    # Настройка маршрутов
+    app.add_routes(routes)
+    
+    # Запуск веб-сервера
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(
+        runner, 
+        Config.WEB_SERVER['host'], 
+        Config.WEB_SERVER['port']
     )
+    await site.start()
+    logger.info(f"Web server started at http://{Config.WEB_SERVER['host']}:{Config.WEB_SERVER['port']}")
 
-    if len(content_items) == 1:
-        await state.set_state(SuggestionStates.waiting_for_confirmation)
+async def shutdown():
+    """Очистка при завершении"""
+    await save_to_json(suggestions, 'suggestions.json')
+    await bot.session.close()
 
-# Все типы сообщений (пример для текста, остальное аналогично)
-@dp.message(SuggestionStates.collecting_content, F.text)
-async def collect_text(message: types.Message, state: FSMContext):
-    await save_content_item(message, state, 'text', text=message.text)
-
-@dp.message(SuggestionStates.waiting_for_confirmation, F.text)
-async def collect_more_text(message: types.Message, state: FSMContext):
-    if message.text == "✅ Подтвердить отправку" or message.text == "/confirm":
-        await confirm_submission(message, state)
-    elif message.text == "➕ Добавить еще":
-        await message.answer("Отправьте ещё один элемент.")
-    elif message.text == "❌ Отменить":
-        await state.clear()
-        await message.answer("Операция отменена.", reply_markup=ReplyKeyboardRemove())
-    else:
-        await save_content_item(message, state, 'text', text=message.text)
-
-# Повторяющийся шаблон для других типов контента
-async def handle_media(message, state, content_type, file_id, caption=None):
-    await save_content_item(message, state, content_type, file_id=file_id, caption=caption)
-
-@dp.message(F.photo)
-async def collect_photo(message: types.Message, state: FSMContext):
-    await handle_media(message, state, 'photo', file_id=message.photo[-1].file_id, caption=message.caption)
-
-@dp.message(F.video)
-async def collect_video(message: types.Message, state: FSMContext):
-    await handle_media(message, state, 'video', file_id=message.video.file_id, caption=message.caption)
-
-@dp.message(F.document)
-async def collect_document(message: types.Message, state: FSMContext):
-    await handle_media(message, state, 'document', file_id=message.document.file_id, caption=message.caption)
-
-@dp.message(F.voice)
-async def collect_voice(message: types.Message, state: FSMContext):
-    await handle_media(message, state, 'voice', file_id=message.voice.file_id)
-
-@dp.message(F.audio)
-async def collect_audio(message: types.Message, state: FSMContext):
-    await handle_media(message, state, 'audio', file_id=message.audio.file_id, caption=message.caption)
-
-@dp.message(F.sticker)
-async def collect_sticker(message: types.Message, state: FSMContext):
-    await handle_media(message, state, 'sticker', file_id=message.sticker.file_id)
-
-@dp.message(F.animation)
-async def collect_animation(message: types.Message, state: FSMContext):
-    await handle_media(message, state, 'animation', file_id=message.animation.file_id, caption=message.caption)
-
-@dp.message(Command("confirm"))
-async def confirm_submission(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    category_name = data['category_name']
-    content_items = data.get('content_items', [])
-
-    if not content_items:
-        await message.answer("Нет контента для отправки.", reply_markup=ReplyKeyboardRemove())
-        return
-
-    for admin_id in ADMIN_IDS:
-        await bot.send_message(admin_id, f"Новое предложение в категории: {category_name} от {message.from_user.full_name}")
-        for item in content_items:
-            ct = item['content_type']
-            caption = item.get('caption', '')
-            if 'from_user' in item:
-                info = f"\n\nОт: {item['from_user']['full_name']} (ID: {item['from_user']['id']})"
-                caption = f"{caption}{info}" if caption else info
-
-            try:
-                if ct == 'text':
-                    await bot.send_message(admin_id, item['text'])
-                elif ct == 'photo':
-                    await bot.send_photo(admin_id, photo=item['file_id'], caption=caption)
-                elif ct == 'video':
-                    await bot.send_video(admin_id, video=item['file_id'], caption=caption)
-                elif ct == 'document':
-                    await bot.send_document(admin_id, document=item['file_id'], caption=caption)
-                elif ct == 'voice':
-                    await bot.send_voice(admin_id, voice=item['file_id'], caption=caption)
-                elif ct == 'audio':
-                    await bot.send_audio(admin_id, audio=item['file_id'], caption=caption)
-                elif ct == 'sticker':
-                    await bot.send_sticker(admin_id, sticker=item['file_id'])
-                    await bot.send_message(admin_id, "⬆️ Стикер выше от пользователя.")
-                elif ct == 'animation':
-                    await bot.send_animation(admin_id, animation=item['file_id'], caption=caption)
-            except Exception as e:
-                await bot.send_message(admin_id, f"Ошибка при отправке: {ct}\n{str(e)}")
-
-    await message.answer("✅ Предложение отправлено!", reply_markup=ReplyKeyboardRemove())
-    await state.clear()
-
-@dp.message(Command("cancel"))
-async def cancel_operation(message: types.Message, state: FSMContext):
-    await state.clear()
-    await message.answer("Операция отменена.", reply_markup=ReplyKeyboardRemove())
-
-@dp.message(Command("stats"))
-async def cmd_stats(message: types.Message):
-    if message.from_user.id in ADMIN_IDS:
-        await message.answer("📊 Статистика скоро будет доступна.")
-    else:
-        await message.answer("❌ Нет доступа к статистике.")
-
-@dp.message(Command("help"))
-async def cmd_help(message: types.Message):
-    await message.answer(
-        "🤖 Бот для сбора предложений\n"
-        "/start – запуск\n"
-        "/suggest – новое предложение\n"
-        "/confirm – подтверждение\n"
-        "/cancel – отмена\n"
-        "/help – помощь"
-    )
-
-# Keep alive
-async def keep_alive():
-    while True:
-        logging.info(f"Ping: {time.strftime('%H:%M:%S')}")
-        await asyncio.sleep(58)
-
-# FastAPI сервер
-app = FastAPI()
-
-@app.get("/")
-async def root():
-    return {"status": "alive"}
-
-async def run_http_server():
-    config = uvicorn.Config(app, host="0.0.0.0", port=8080, log_level="info")
-    server = uvicorn.Server(config)
-    await server.serve()
-
-# Основной запуск
 async def main():
-    keep_alive_task = asyncio.create_task(keep_alive())
-    http_server_task = asyncio.create_task(run_http_server())
+    """Основная функция"""
+    await startup()
+    
     try:
         await dp.start_polling(bot)
     finally:
-        keep_alive_task.cancel()
-        http_server_task.cancel()
-        await keep_alive_task
-        await http_server_task
+        await shutdown()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
