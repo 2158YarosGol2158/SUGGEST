@@ -14,6 +14,7 @@ from aiogram.types import (
 import json
 import os
 
+
 # Настройки
 logging.basicConfig(
     level=logging.INFO,
