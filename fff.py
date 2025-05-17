@@ -157,26 +157,26 @@ async def confirm_suggestion(message: types.Message, state: FSMContext):
                 f"📨 Новое предложение ({suggestion['category']}) от @{suggestion['author']['username']}"
             )
             for item in suggestion["items"]:
-    if item["type"] == "text":
-        await bot.send_message(admin_id, item["data"])
-    elif item["type"] == "photo":
-        await bot.send_photo(
-            admin_id,
-            item["file_id"],
-            caption=item.get("caption", "")
-        )
-    elif item["type"] == "document":
-        await bot.send_document(
-            admin_id,
-            item["file_id"],
-            caption=item.get("caption", "")
-        )
-    elif item["type"] == "video":
-        await bot.send_video(
-            admin_id,
-            item["file_id"],
-            caption=item.get("caption", "")
-        )
+                if item["type"] == "text":
+                    await bot.send_message(admin_id, item["data"])
+                elif item["type"] == "photo":
+                    await bot.send_photo(
+                        admin_id,
+                        item["file_id"],
+                        caption=item.get("caption", "")
+                    )
+                elif item["type"] == "document":
+                    await bot.send_document(
+                        admin_id,
+                        item["file_id"],
+                        caption=item.get("caption", "")
+                    )
+                elif item["type"] == "video":
+                    await bot.send_video(
+                        admin_id,
+                        item["file_id"],
+                        caption=item.get("caption", "")
+                    )
 
         except Exception as e:
             logger.error(f"Ошибка отправки админу {admin_id}: {e}")
