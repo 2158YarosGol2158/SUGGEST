@@ -274,7 +274,22 @@ async def show_user_suggestions(message: types.Message):
 
     await message.answer(response, parse_mode="HTML")
 
+from aiohttp import web
+
+async def handle(request):
+    return web.Response(text="Bot is alive")
+
+async def start_web_app():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 8080)
+    await site.start()
+
+
 async def main():
+    await start_web_app()  # Запуск веб-сервера
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
