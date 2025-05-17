@@ -13,9 +13,8 @@ from aiogram.types import (
 )
 import json
 import os
-
-
-
+import asyncio
+from aiohttp import web
 
 # Настройки
 logging.basicConfig(
@@ -275,7 +274,7 @@ async def show_user_suggestions(message: types.Message):
 
     await message.answer(response, parse_mode="HTML")
 
-from aiohttp import web
+
 
 async def handle(request):
     return web.Response(text="Bot is alive")
