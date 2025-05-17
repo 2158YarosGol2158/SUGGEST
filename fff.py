@@ -287,9 +287,14 @@ async def start_web_app():
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     await site.start()
 
+async def anti_sleep_task():
+    while True:
+        print("⏳ Anti-sleep ping")
+        await asyncio.sleep(30)
+asyncio.create_task(anti_sleep_task())
 
 async def main():
-    await start_web_app()  # Запуск веб-сервера
+    await start_web_app()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
