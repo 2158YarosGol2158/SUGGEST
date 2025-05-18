@@ -289,11 +289,11 @@ async def start_web_app():
 
 async def anti_sleep_task():
     while True:
-        print("⏳ Anti-sleep ping")
-        await asyncio.sleep(30)
-asyncio.create_task(anti_sleep_task())
+        print("⏳ Anti-sleep ping")  # или просто pass
+        await asyncio.sleep(30)  # каждые 5 минут
 
 async def main():
+    asyncio.create_task(anti_sleep_task())
     await start_web_app()
     await dp.start_polling(bot)
 
