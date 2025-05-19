@@ -294,9 +294,13 @@ async def anti_sleep_task():
         await asyncio.sleep(30)  # каждые 5 минут
 
 async def main():
-    asyncio.create_task(anti_sleep_task())
-    await start_web_app()
-    await dp.start_polling(bot)
+    tasks = [
+        asyncio.create_task(anti_sleep_task()),
+        asyncio.create_task(start_web_app()),
+        asyncio.create_task(dp.start_polling(bot))
+    ]
+    await asyncio.gather(*tasks)
+
 
 if __name__ == "__main__":
     import asyncio
