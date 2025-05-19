@@ -16,6 +16,7 @@ import os
 import asyncio
 from aiohttp import web
 
+
 # Настройки
 logging.basicConfig(
     level=logging.INFO,
