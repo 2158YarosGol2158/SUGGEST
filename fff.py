@@ -294,15 +294,15 @@ async def anti_sleep_task():
         await asyncio.sleep(5)
 
 async def main():
-    tasks = [
-        asyncio.create_task(anti_sleep_task()),
-        asyncio.create_task(start_web_app()),
-        asyncio.create_task(dp.start_polling(bot))
-    ]
-   await asyncio.gather(*tasks)
-   except Exception as e:
-       logging.exception("Ошибка в одной из задач")
-
+    try:
+        tasks = [
+            asyncio.create_task(anti_sleep_task()),
+            asyncio.create_task(start_web_app()),
+            asyncio.create_task(dp.start_polling(bot))
+        ]
+        await asyncio.gather(*tasks)
+    except Exception as e:
+        logging.exception("Ошибка в одной из задач")
 
 if __name__ == "__main__":
     import asyncio
