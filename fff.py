@@ -290,8 +290,8 @@ async def start_web_app():
 
 async def anti_sleep_task():
     while True:
-        print("⏳ Anti-sleep ping")  # или просто pass
-        await asyncio.sleep(30)  # каждые 5 минут
+        print("⏳ Anti-sleep ping", flush=True)
+        await asyncio.sleep(5)
 
 async def main():
     tasks = [
@@ -299,9 +299,12 @@ async def main():
         asyncio.create_task(start_web_app()),
         asyncio.create_task(dp.start_polling(bot))
     ]
-    await asyncio.gather(*tasks)
+   await asyncio.gather(*tasks)
+   except Exception as e:
+       logging.exception("Ошибка в одной из задач")
 
 
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
+    print("🚀 main() запущен", flush=True)
