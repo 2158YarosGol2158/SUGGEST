@@ -289,10 +289,20 @@ async def start_web_app():
     site = web.TCPSite(runner, "0.0.0.0", 8080)
     await site.start()
 
+import aiohttp
+
 async def anti_sleep_task():
+    url = "https://api.open-meteo.com/v1/forecast?latitude=50.45&longitude=30.52&current_weather=true"
     while True:
-        print("⏳ Anti-sleep ping", flush=True)
-        await asyncio.sleep(5)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    data = await resp.json()
+                    temp = data["current_weather"]["temperature"]
+                    print(f"🌡️ Температура в Киеве: {temp}°C", flush=True)
+        except Exception as e:
+            print(f"Ошибка получения погоды: {e}", flush=True)
+        await asyncio.sleep(10)
 
 async def main():
     try:
