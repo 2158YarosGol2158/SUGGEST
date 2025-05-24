@@ -55,8 +55,8 @@ class Keyboards:
         return ReplyKeyboardMarkup(
             keyboard=[
                 [KeyboardButton(text="Розыгрыши")],
-                [KeyboardButton(text="Скоро")],
-                [KeyboardButton(text="Другое")]
+                [KeyboardButton(text="Реклама")],
+                [KeyboardButton(text="Предложения")]
             ],
             resize_keyboard=True
         )
