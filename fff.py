@@ -54,7 +54,7 @@ class Keyboards:
     def categories():
         return ReplyKeyboardMarkup(
             keyboard=[
-                [KeyboardButton(text="Конкурс")],
+                [KeyboardButton(text="Розыгрыши")],
                 [KeyboardButton(text="Скоро")],
                 [KeyboardButton(text="Другое")]
             ],
@@ -104,7 +104,7 @@ async def start_suggestion(message: types.Message, state: FSMContext):
 
 @dp.message(SuggestionStates.WAITING_CATEGORY)
 async def select_category(message: types.Message, state: FSMContext):
-    if message.text not in ["Конкурс", "Скоро", "Другое"]:
+    if message.text not in ["Розыгрыши", "Реклама", "Предложения"]:
         await message.answer("Пожалуйста, выберите категорию из списка!")
         return
 
