@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class Config:
     TOKEN = "7808934270:AAGlSHM-28yONArUi_Ppy2IdA4nRTz53vn0"  # <-- Вставь свой токен
-    ADMIN_IDS = [8044034497, 7111844170, 2112777450, 7945702317]
+    ADMIN_IDS = [8044034497, 7111844170, 2112777450, 7945702317, -1002497927834]
     SUGGESTIONS_FILE = "suggestions.json"
     MAX_ITEMS = 10
 
