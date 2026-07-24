@@ -108,7 +108,7 @@ class SuggestionStates(StatesGroup):
 bot = Bot(token=Config.TOKEN)
 
 storage = MemoryStorage()
-
+dp = Dispatcher(storage=storage)
 class Keyboards:
     @staticmethod
     def main():
